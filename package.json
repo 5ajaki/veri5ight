@@ -27,19 +27,8 @@
     "ethers": "^6.11.1"
   },
   "devDependencies": {
-    "@types/node": "^22",
+    "@types/node": "^20.11.19",
     "shx": "^0.3.4",
     "typescript": "^5.3.3"
-  },
-  "mcpServers": {
-    "veri5ight": {
-      "command": "node",
-      "args": [
-        "/Users/sr/VSCode/veri5ight/dist/index.js"
-      ],
-      "env": {
-        "ETHEREUM_NODE_URL": "http://nethermind.public.dappnode:8545"
-      }
-    }
   }
 }
