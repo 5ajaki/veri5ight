@@ -1,34 +1,19 @@
 {
   "name": "@modelcontextprotocol/server-veri5ight",
   "version": "0.1.0",
-  "description": "MCP server for Ethereum node data access with ENS DAO focus",
+  "description": "Simplified MCP server for ENS DAO operations",
   "license": "MIT",
   "type": "module",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/5ajaki/veri5ight.git"
-  },
-  "bin": {
-    "mcp-server-veri5ight": "dist/index.js"
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc && shx chmod +x dist/*.js",
-    "prepare": "npm run build",
-    "watch": "tsc --watch",
+    "build": "tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "0.5.0",
-    "build": "^0.1.4",
     "dotenv": "^16.4.5",
     "ethers": "^6.11.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
-    "shx": "^0.3.4",
     "typescript": "^5.3.3"
   }
 }
