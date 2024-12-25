@@ -4,28 +4,20 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { EthereumService } from "./services/ethereum.js";
 import { config } from "./config/environment.js";
-import {
-  BalanceResponseSchema,
-  ProposalStateResponseSchema,
-  MCPRequest,
-} from "./types.js";
 
-// Define our request schemas
-const GetENSBalanceSchema = z.object({
-  method: z.literal("ethereum/getENSBalance"),
+// Define schemas
+const ListToolsRequestSchema = z.object({
+  method: z.literal("tools/list"),
+});
+
+const CallToolRequestSchema = z.object({
+  method: z.literal("tools/call"),
   params: z.object({
-    address: z.string(),
+    name: z.string(),
+    arguments: z.record(z.any()),
   }),
 });
 
-const GetProposalStateSchema = z.object({
-  method: z.literal("ethereum/getProposalState"),
-  params: z.object({
-    proposalId: z.string(),
-  }),
-});
-
-// Add debug logging with timestamp
 const log = (message: string) => {
   const timestamp = new Date().toISOString();
   console.error(`[${timestamp}] [Veri5ight Debug] ${message}`);
@@ -33,87 +25,91 @@ const log = (message: string) => {
 
 async function main() {
   try {
-    // Clear stdout first
     process.stdout.write("");
-
-    // All logging to stderr
     console.error("Veri5ight MCP Server running on stdio");
 
     const ethService = new EthereumService();
     log("Ethereum service initialized");
 
-    const serverConfig = {
-      name: "veri5ight",
-      version: "1.0.0",
-    };
+    const server = new Server(
+      {
+        name: "veri5ight",
+        version: "1.0.0",
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
 
-    const capabilities = {
-      capabilities: {
-        tools: {
-          "ethereum/getENSBalance": {
-            name: "ethereum/getENSBalance",
+    // Tool list handler
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      return {
+        tools: [
+          {
+            name: "get_ens_balance",
             description: "Get ENS token balance for an Ethereum address",
-            parameters: {
+            inputSchema: {
               type: "object",
               properties: {
                 address: {
                   type: "string",
                   description: "Ethereum address or ENS name",
-                  examples: [
-                    "vitalik.eth",
-                    "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
-                  ],
                 },
               },
               required: ["address"],
-              additionalProperties: false,
             },
           },
-          "ethereum/getProposalState": {
-            name: "ethereum/getProposalState",
+          {
+            name: "get_proposal_state",
             description: "Get the current state of an ENS DAO proposal",
-            parameters: {
+            inputSchema: {
               type: "object",
               properties: {
                 proposalId: {
                   type: "string",
                   description: "ENS DAO proposal ID",
-                  examples: ["1", "2"],
                 },
               },
               required: ["proposalId"],
-              additionalProperties: false,
             },
           },
-        },
-      },
-    };
-
-    const server = new Server(serverConfig, capabilities);
-    log("Server created");
-
-    // Set up request handlers
-    server.setRequestHandler(GetENSBalanceSchema, async (request) => {
-      log(
-        `Handling ENS balance request for address: ${request.params.address}`
-      );
-      const result = await ethService.getENSBalance(request.params.address);
-      return { balance: result.content[0].text };
+        ],
+      };
     });
 
-    server.setRequestHandler(GetProposalStateSchema, async (request) => {
-      log(
-        `Handling proposal state request for ID: ${request.params.proposalId}`
-      );
-      const result = await ethService.getProposalState(
-        request.params.proposalId
-      );
-      return { state: parseInt(result.content[0].text) };
+    // Tool call handler
+    server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+      const { name, arguments: args } = request.params;
+
+      if (name === "get_ens_balance") {
+        const result = await ethService.getENSBalance(args.address);
+        return {
+          _meta: {},
+          content: [
+            {
+              type: "text",
+              text: result.content[0].text,
+            },
+          ],
+        };
+      } else if (name === "get_proposal_state") {
+        const result = await ethService.getProposalState(args.proposalId);
+        return {
+          _meta: {},
+          content: [
+            {
+              type: "text",
+              text: result.content[0].text,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unknown tool: ${name}`);
     });
 
     log("Request handlers configured");
-
-    // Connect using stdio transport
     const transport = new StdioServerTransport();
     await server.connect(transport);
     log("Server connected and ready!");
@@ -124,7 +120,6 @@ async function main() {
   }
 }
 
-// Add global error handlers
 process.on("uncaughtException", (error) => {
   log(`Uncaught exception: ${error}`);
   console.error(error);
