@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { config } from "../config/environment.js";
+import { Result } from "../types.js";
 
 // ENS DAO Contract addresses
 const ENS_TOKEN_ADDRESS = "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72";
@@ -12,23 +13,66 @@ export class EthereumService {
     this.provider = new ethers.JsonRpcProvider(config.ethereumNode.url);
   }
 
-  async getENSBalance(address: string): Promise<string> {
-    const ensContract = new ethers.Contract(
-      ENS_TOKEN_ADDRESS,
-      ["function balanceOf(address) view returns (uint256)"],
-      this.provider
-    );
-    const balance = await ensContract.balanceOf(address);
-    return ethers.formatUnits(balance, 18); // ENS has 18 decimals
+  async getENSBalance(address: string): Promise<Result> {
+    try {
+      const ensContract = new ethers.Contract(
+        ENS_TOKEN_ADDRESS,
+        ["function balanceOf(address) view returns (uint256)"],
+        this.provider
+      );
+      const balance = await ensContract.balanceOf(address);
+      return {
+        content: [
+          {
+            type: "text",
+            text: ethers.formatUnits(balance, 18),
+          },
+        ],
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `Error fetching ENS balance: ${errorMessage}`,
+          },
+        ],
+      };
+    }
   }
 
-  async getProposalState(proposalId: string): Promise<number> {
-    const governanceContract = new ethers.Contract(
-      ENS_GOVERNANCE_ADDRESS,
-      ["function state(uint256) view returns (uint8)"],
-      this.provider
-    );
-    return await governanceContract.state(proposalId);
+  async getProposalState(proposalId: string): Promise<Result> {
+    try {
+      const governanceContract = new ethers.Contract(
+        ENS_GOVERNANCE_ADDRESS,
+        ["function state(uint256) view returns (uint8)"],
+        this.provider
+      );
+      const state = await governanceContract.state(proposalId);
+      return {
+        content: [
+          {
+            type: "text",
+            text: state.toString(),
+          },
+        ],
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `Error fetching proposal state: ${errorMessage}`,
+          },
+        ],
+      };
+    }
   }
 }
 

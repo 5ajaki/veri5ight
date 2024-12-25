@@ -32,7 +32,39 @@ async function main() {
     },
     {
       capabilities: {
-        tools: {}, // We'll expose our Ethereum interactions as tools
+        tools: {
+          "ethereum/getENSBalance": {
+            description: "Get ENS token balance for an Ethereum address",
+            inputSchema: {
+              type: "object",
+              properties: {
+                address: {
+                  type: "string",
+                  description: "Ethereum address or ENS name",
+                  examples: [
+                    "vitalik.eth",
+                    "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                  ],
+                },
+              },
+              required: ["address"],
+            },
+          },
+          "ethereum/getProposalState": {
+            description: "Get the current state of an ENS DAO proposal",
+            inputSchema: {
+              type: "object",
+              properties: {
+                proposalId: {
+                  type: "string",
+                  description: "ENS DAO proposal ID",
+                  examples: ["1", "2"],
+                },
+              },
+              required: ["proposalId"],
+            },
+          },
+        },
       },
     }
   );

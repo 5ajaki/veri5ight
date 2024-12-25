@@ -9,9 +9,29 @@ export class EthereumService {
         this.provider = new ethers.JsonRpcProvider(config.ethereumNode.url);
     }
     async getENSBalance(address) {
-        const ensContract = new ethers.Contract(ENS_TOKEN_ADDRESS, ["function balanceOf(address) view returns (uint256)"], this.provider);
-        const balance = await ensContract.balanceOf(address);
-        return ethers.formatUnits(balance, 18); // ENS has 18 decimals
+        try {
+            const ensContract = new ethers.Contract(ENS_TOKEN_ADDRESS, ["function balanceOf(address) view returns (uint256)"], this.provider);
+            const balance = await ensContract.balanceOf(address);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: ethers.formatUnits(balance, 18),
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            return {
+                isError: true,
+                content: [
+                    {
+                        type: "text",
+                        text: `Error fetching ENS balance: ${error.message}`,
+                    },
+                ],
+            };
+        }
     }
     async getProposalState(proposalId) {
         const governanceContract = new ethers.Contract(ENS_GOVERNANCE_ADDRESS, ["function state(uint256) view returns (uint8)"], this.provider);
