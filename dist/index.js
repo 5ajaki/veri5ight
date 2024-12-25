@@ -120,12 +120,12 @@ async function handleRequest(data) {
     }
 }
 // Main process
-process.stdout.write("\n");
+process.stdout.write(""); // Initial empty write
 console.error("Veri5ight MCP Server running");
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", async (data) => {
     const response = await handleRequest(data.toString());
-    process.stdout.write(JSON.stringify(response) + "\n\n");
+    process.stdout.write(JSON.stringify(response) + "\n");
 });
 // Basic error handling
 process.on("uncaughtException", (error) => {
