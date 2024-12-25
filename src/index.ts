@@ -25,7 +25,7 @@ async function getENSBalance(address: string) {
     const balance = await ensContract.balanceOf(address);
     return ethers.formatUnits(balance, 18);
   } catch (error) {
-    return `Error: ${error.message}`;
+    return `Error: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
@@ -34,7 +34,7 @@ async function getProposalState(proposalId: string) {
     const state = await governorContract.state(proposalId);
     return state.toString();
   } catch (error) {
-    return `Error: ${error.message}`;
+    return `Error: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
@@ -42,79 +42,105 @@ async function getProposalState(proposalId: string) {
 async function handleRequest(data: string) {
   try {
     const request = JSON.parse(data);
-    const { method, params } = request;
+    const { method, params, id } = request;
 
-    switch (method) {
-      case "tools/list":
-        return {
-          tools: [
-            {
-              name: "get_ens_balance",
-              description: "Get ENS token balance for an Ethereum address",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  address: {
-                    type: "string",
-                    description: "Ethereum address or ENS name",
+    // All responses must include these JSON-RPC fields
+    const baseResponse = {
+      jsonrpc: "2.0",
+      id: id,
+    };
+
+    try {
+      switch (method) {
+        case "tools/list":
+          return {
+            ...baseResponse,
+            result: {
+              tools: [
+                {
+                  name: "get_ens_balance",
+                  description: "Get ENS token balance for an Ethereum address",
+                  inputSchema: {
+                    type: "object",
+                    properties: {
+                      address: {
+                        type: "string",
+                        description: "Ethereum address or ENS name",
+                      },
+                    },
+                    required: ["address"],
                   },
                 },
-                required: ["address"],
-              },
-            },
-            {
-              name: "get_proposal_state",
-              description: "Get the current state of an ENS DAO proposal",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  proposalId: {
-                    type: "string",
-                    description: "ENS DAO proposal ID",
+                {
+                  name: "get_proposal_state",
+                  description: "Get the current state of an ENS DAO proposal",
+                  inputSchema: {
+                    type: "object",
+                    properties: {
+                      proposalId: {
+                        type: "string",
+                        description: "ENS DAO proposal ID",
+                      },
+                    },
+                    required: ["proposalId"],
                   },
                 },
-                required: ["proposalId"],
-              },
+              ],
             },
-          ],
-        };
+          };
 
-      case "tools/call":
-        const { name, arguments: args } = params;
-        let result;
+        case "tools/call":
+          const { name, arguments: args } = params;
+          let result;
 
-        if (name === "get_ens_balance") {
-          result = await getENSBalance(args.address);
-        } else if (name === "get_proposal_state") {
-          result = await getProposalState(args.proposalId);
-        } else {
-          throw new Error(`Unknown tool: ${name}`);
-        }
+          if (name === "get_ens_balance") {
+            result = await getENSBalance(args.address);
+          } else if (name === "get_proposal_state") {
+            result = await getProposalState(args.proposalId);
+          } else {
+            throw new Error(`Unknown tool: ${name}`);
+          }
 
-        return {
-          _meta: {},
-          content: [{ type: "text", text: result }],
-        };
+          return {
+            ...baseResponse,
+            result: {
+              _meta: {},
+              content: [{ type: "text", text: result }],
+            },
+          };
 
-      default:
-        throw new Error(`Unknown method: ${method}`);
+        default:
+          throw new Error(`Unknown method: ${method}`);
+      }
+    } catch (error) {
+      return {
+        ...baseResponse,
+        error: {
+          code: -32000,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
     }
-  } catch (error) {
+  } catch (parseError) {
     return {
-      isError: true,
-      content: [{ type: "text", text: error.message }],
+      jsonrpc: "2.0",
+      id: null,
+      error: {
+        code: -32700,
+        message: "Parse error",
+      },
     };
   }
 }
 
 // Main process
-process.stdout.write(""); // Required by MCP
+process.stdout.write("\n");
 console.error("Veri5ight MCP Server running");
 
 process.stdin.setEncoding("utf8");
-process.stdin.on("data", async (data) => {
-  const response = await handleRequest(data);
-  process.stdout.write(JSON.stringify(response) + "\n");
+process.stdin.on("data", async (data: Buffer) => {
+  const response = await handleRequest(data.toString());
+  process.stdout.write(JSON.stringify(response) + "\n\n");
 });
 
 // Basic error handling
