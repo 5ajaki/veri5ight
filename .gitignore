@@ -1,24 +1,24 @@
-  # Dependencies
-  node_modules/
-  package-lock.json
-  
-  # Build output
-  dist/
-  
-  # Environment variables
-  .env
-  .env.*
-  !.env.example
-  
-  # IDE files
-  .vscode/
-  .idea/
-  *.swp
-  *.swo
-  
-  # OS files
-  .DS_Store
-  Thumbs.db
-  
-  # Claude assets
-  .claude/
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude assets
+.claude/
