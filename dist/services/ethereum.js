@@ -22,20 +22,43 @@ export class EthereumService {
             };
         }
         catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
             return {
                 isError: true,
                 content: [
                     {
                         type: "text",
-                        text: `Error fetching ENS balance: ${error.message}`,
+                        text: `Error fetching ENS balance: ${errorMessage}`,
                     },
                 ],
             };
         }
     }
     async getProposalState(proposalId) {
-        const governanceContract = new ethers.Contract(ENS_GOVERNANCE_ADDRESS, ["function state(uint256) view returns (uint8)"], this.provider);
-        return await governanceContract.state(proposalId);
+        try {
+            const governanceContract = new ethers.Contract(ENS_GOVERNANCE_ADDRESS, ["function state(uint256) view returns (uint8)"], this.provider);
+            const state = await governanceContract.state(proposalId);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: state.toString(),
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            return {
+                isError: true,
+                content: [
+                    {
+                        type: "text",
+                        text: `Error fetching proposal state: ${errorMessage}`,
+                    },
+                ],
+            };
+        }
     }
 }
 // Export singleton instance
