@@ -1,7 +1,7 @@
 import { ChildProcess, IOType, spawn } from "node:child_process";
 import process from "node:process";
 import { ReadBuffer, serializeMessage } from "../shared/stdio.js";
-import { JSONRPCMessage } from "../types.js";
+import { JSONRPCMessage, MCPResponse } from "../src/types.js";
 import { Transport } from "../shared/transport.js";
 import { Stream } from "node:stream";
 

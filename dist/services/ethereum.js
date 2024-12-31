@@ -1,65 +1,153 @@
 import { ethers } from "ethers";
+import fetch from "node-fetch";
 import { config } from "../config/environment.js";
-// ENS DAO Contract addresses
-const ENS_TOKEN_ADDRESS = "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72";
-const ENS_GOVERNANCE_ADDRESS = "0x323A76393544d5ecca80cd6ef2A560C6a395b7E3";
 export class EthereumService {
-    provider;
     constructor() {
-        this.provider = new ethers.JsonRpcProvider(config.ethereumNode.url);
+        this.provider = new ethers.JsonRpcProvider(config.ethereum.nodeUrl);
+        this.etherscanApiKey = process.env.ETHERSCAN_API_KEY || "";
+        this.ensContract = new ethers.Contract(config.ethereum.ensContractAddress, ["function balanceOf(address) view returns (uint256)"], this.provider);
     }
     async getENSBalance(address) {
         try {
-            const ensContract = new ethers.Contract(ENS_TOKEN_ADDRESS, ["function balanceOf(address) view returns (uint256)"], this.provider);
-            const balance = await ensContract.balanceOf(address);
+            // Resolve ENS name if it's an ENS address
+            const resolvedAddress = address.endsWith(".eth")
+                ? await this.provider.resolveName(address)
+                : address;
+            if (!resolvedAddress) {
+                throw new Error(`Could not resolve address: ${address}`);
+            }
+            // Get the balance
+            const balance = await this.ensContract.balanceOf(resolvedAddress);
+            const decimals = await this.ensContract.decimals();
+            // Format the balance with proper decimals
+            const formattedBalance = ethers.formatUnits(balance, decimals);
             return {
                 content: [
                     {
                         type: "text",
-                        text: ethers.formatUnits(balance, 18),
+                        text: `${formattedBalance} ENS`,
                     },
                 ],
             };
         }
         catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-            return {
-                isError: true,
-                content: [
-                    {
-                        type: "text",
-                        text: `Error fetching ENS balance: ${errorMessage}`,
-                    },
-                ],
-            };
+            if (error instanceof Error) {
+                throw new Error(`Failed to get ENS balance: ${error.message}`);
+            }
+            throw error;
         }
     }
     async getProposalState(proposalId) {
+        // Implementation for proposal state...
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: "1", // Placeholder implementation
+                },
+            ],
+        };
+    }
+    async getContractABI(address) {
         try {
-            const governanceContract = new ethers.Contract(ENS_GOVERNANCE_ADDRESS, ["function state(uint256) view returns (uint8)"], this.provider);
-            const state = await governanceContract.state(proposalId);
+            const resolvedAddress = address.endsWith(".eth")
+                ? await this.provider.resolveName(address)
+                : address;
+            if (!resolvedAddress) {
+                throw new Error(`Could not resolve address: ${address}`);
+            }
+            const url = `https://api.etherscan.io/api?module=contract&action=getabi&address=${resolvedAddress}&apikey=${this.etherscanApiKey}`;
+            const response = await fetch(url);
+            const data = (await response.json());
+            if (data.status === "0") {
+                throw new Error(`Etherscan error: ${data.result}`);
+            }
+            const abi = JSON.parse(data.result);
+            const formattedABI = JSON.stringify(abi, null, 2);
+            const nameUrl = `https://api.etherscan.io/api?module=contract&action=getsourcecode&address=${resolvedAddress}&apikey=${this.etherscanApiKey}`;
+            const nameResponse = await fetch(nameUrl);
+            const nameData = (await nameResponse.json());
+            const contractName = nameData.result[0]?.ContractName || "Unknown Contract";
             return {
                 content: [
                     {
                         type: "text",
-                        text: state.toString(),
+                        text: `Contract Name: ${contractName}\n\nABI:\n${formattedABI}`,
                     },
                 ],
             };
         }
         catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            if (error instanceof Error) {
+                throw new Error(`Failed to get contract ABI: ${error.message}`);
+            }
+            throw error;
+        }
+    }
+    async decodeTransaction(txHash) {
+        try {
+            // Get transaction
+            const tx = await this.provider.getTransaction(txHash);
+            if (!tx) {
+                throw new Error(`Transaction not found: ${txHash}`);
+            }
+            // Get the first 4 bytes of the input data (function selector)
+            const functionSelector = tx.data.slice(0, 10);
+            // Get contract code and try to identify the function
+            const code = await this.getContractCode(tx.to);
             return {
-                isError: true,
                 content: [
                     {
                         type: "text",
-                        text: `Error fetching proposal state: ${errorMessage}`,
+                        text: `
+Transaction Details:
+To: ${tx.to}
+Value: ${ethers.formatEther(tx.value)} ETH
+Function Selector: ${functionSelector}
+Input Data: ${tx.data}
+Gas Limit: ${tx.gasLimit}
+Gas Price: ${ethers.formatUnits(tx.gasPrice || 0, "gwei")} Gwei
+`,
                     },
                 ],
             };
         }
+        catch (error) {
+            if (error instanceof Error) {
+                throw new Error(`Failed to decode transaction: ${error.message}`);
+            }
+            throw error;
+        }
+    }
+    async getContractCode(address) {
+        try {
+            // First try to resolve if it's an ENS name
+            const resolvedAddress = address.endsWith(".eth")
+                ? await this.provider.resolveName(address)
+                : address;
+            if (!resolvedAddress) {
+                throw new Error(`Could not resolve address: ${address}`);
+            }
+            // Get contract code using debug_getContractCode
+            const code = await this.provider.send("debug_getContractCode", [
+                resolvedAddress,
+            ]);
+            // Get runtime code using eth_getCode
+            const runtimeCode = await this.provider.getCode(resolvedAddress);
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Contract Code at ${resolvedAddress}:\n\nDeployed Code:\n${code}\n\nRuntime Code:\n${runtimeCode}`,
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            if (error instanceof Error) {
+                throw new Error(`Failed to get contract code: ${error.message}`);
+            }
+            throw error;
+        }
     }
 }
-// Export singleton instance
-export const ethereumService = new EthereumService();
