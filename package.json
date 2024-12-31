@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "dotenv": "^16.4.5",
-    "ethers": "^6.11.1"
+    "ethers": "^6.11.1",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
+    "@types/node-fetch": "^2.6.12",
     "typescript": "^5.3.3"
   }
 }
