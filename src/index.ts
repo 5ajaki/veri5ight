@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -35,22 +37,28 @@ class Veri5ightServer {
   private ensContract: ethers.Contract;
 
   constructor() {
+    console.error("Initializing Veri5ight server...");
     // Initialize server
     this.server = new Server(
       { name: "veri5ight", version: "1.0.0" },
       { capabilities: { tools: {} } }
     );
+    console.error("Server instance created");
 
     // Initialize provider
     this.provider = new ethers.JsonRpcProvider(process.env.ETH_NODE_URL);
+    console.error("Provider initialized with URL:", process.env.ETH_NODE_URL);
+
     this.ensContract = new ethers.Contract(
       ENS_TOKEN,
       ["function balanceOf(address) view returns (uint256)"],
       this.provider
     );
+    console.error("ENS contract initialized");
 
     this.setupHandlers();
     this.setupErrorHandling();
+    console.error("Server setup complete");
   }
 
   private setupErrorHandling(): void {
@@ -73,6 +81,11 @@ class Veri5ightServer {
           {
             name: "ping",
             description: "Basic test tool",
+            inputSchema: {
+              type: "object",
+              properties: {},
+              required: [],
+            },
             parameters: {
               type: "object",
               properties: {},
@@ -82,6 +95,16 @@ class Veri5ightServer {
           {
             name: "ethereum/getENSBalance",
             description: "Get ENS token balance for an address",
+            inputSchema: {
+              type: "object",
+              properties: {
+                address: {
+                  type: "string",
+                  description: "Ethereum address or ENS name",
+                },
+              },
+              required: ["address"],
+            },
             parameters: {
               type: "object",
               properties: {
@@ -95,7 +118,7 @@ class Veri5ightServer {
           },
         ],
       };
-      console.error("Registered tools:", JSON.stringify(tools, null, 2));
+      console.error("Sending tools response:", JSON.stringify(tools, null, 2));
       return tools;
     });
 
@@ -169,8 +192,10 @@ class Veri5ightServer {
   }
 
   async run(): Promise<void> {
+    console.error("Starting server...");
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
+    console.error("Server connected and running");
   }
 }
 

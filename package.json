@@ -4,9 +4,17 @@
   "description": "Simplified MCP server for ENS DAO operations",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "veri5ight": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc && chmod +x dist/index.js",
+    "start": "node dist/index.js",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.1",
