@@ -9,13 +9,12 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "dotenv": "^16.4.5",
-    "ethers": "^6.11.1",
-    "node-fetch": "^3.3.2"
+    "ethers": "^6.11.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
-    "@types/node-fetch": "^2.6.12",
     "typescript": "^5.3.3"
   }
 }
