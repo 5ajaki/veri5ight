@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { ListToolsRequestSchema, CallToolRequestSchema, ErrorCode, McpError, } from "@modelcontextprotocol/sdk/types.js";
+import { ListToolsRequestSchema, CallToolRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
 import { ethers } from "ethers";
 import { config } from "dotenv";
 // Load environment variables
@@ -60,7 +60,7 @@ class Veri5ightServer {
                         },
                     },
                     {
-                        name: "ethereum/getENSBalance",
+                        name: "ethereum_getENSBalance",
                         description: "Get ENS token balance for an address",
                         inputSchema: {
                             type: "object",
@@ -90,9 +90,8 @@ class Veri5ightServer {
         });
         // Handle tool calls with debug logging
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-            console.error("Received tool call:", JSON.stringify(request, null, 2));
-            const { name, arguments: toolArgs } = request.params;
-            if (name === "ping") {
+            console.error("Tool call received:", JSON.stringify(request, null, 2));
+            if (request.params.name === "ping") {
                 return {
                     content: [
                         {
@@ -102,44 +101,37 @@ class Veri5ightServer {
                     ],
                 };
             }
-            if (name === "ethereum/getENSBalance") {
-                console.error("Validating ENS balance arguments:", toolArgs);
-                if (!isENSBalanceArgs(toolArgs)) {
-                    throw new McpError(ErrorCode.InvalidParams, "Invalid arguments for getENSBalance");
-                }
+            if (request.params.name === "ethereum_getENSBalance") {
                 try {
-                    // Resolve ENS name if needed
-                    console.error("Resolving address:", toolArgs.address);
-                    const resolvedAddress = toolArgs.address.endsWith(".eth")
-                        ? await this.provider.resolveName(toolArgs.address)
-                        : toolArgs.address;
-                    console.error("Resolved to:", resolvedAddress);
-                    if (!resolvedAddress) {
-                        throw new Error(`Could not resolve address: ${toolArgs.address}`);
+                    const address = request.params.arguments?.address;
+                    if (!address) {
+                        throw new Error("Address is required");
                     }
-                    // Get ENS balance
-                    console.error("Getting balance for:", resolvedAddress);
-                    const balance = await this.ensContract.balanceOf(resolvedAddress);
-                    const formattedBalance = ethers.formatUnits(balance, 18);
-                    console.error("Balance:", formattedBalance);
+                    const balance = await this.ensContract.balanceOf(address);
+                    console.error("ENS balance retrieved:", balance.toString());
                     return {
                         content: [
                             {
                                 type: "text",
-                                text: `${formattedBalance} ENS`,
+                                text: `ENS Balance for ${address}: ${balance.toString()} tokens`,
                             },
                         ],
                     };
                 }
                 catch (error) {
-                    console.error("Error:", error);
-                    if (error instanceof Error) {
-                        throw new McpError(ErrorCode.InternalError, `Failed to get ENS balance: ${error.message}`);
-                    }
-                    throw error;
+                    console.error("Error getting ENS balance:", error);
+                    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `Error getting ENS balance: ${errorMessage}`,
+                            },
+                        ],
+                    };
                 }
             }
-            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+            throw new Error(`Unknown tool: ${request.params.name}`);
         });
     }
     async run() {
