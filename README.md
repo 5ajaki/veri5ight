@@ -4,22 +4,23 @@
 
 ## 🌟 What's This All About?
 
-Veri5ight is like a universal translator between Claude and Ethereum nodes. It helps Claude:
+Veri5ight is a direct interface between Claude and Ethereum nodes, providing:
 
-- 💰 Check ENS token balances
-- 🔎 Peek at smart contract code
-- 🕵️‍♂️ Decode mysterious transactions
+- 💰 Real-time token balance checks
+- 🔎 Smart contract information
+- 🚀 Direct node access without rate limits
+- 🔒 Private, secure interactions
 
 ## 🚀 Quick Start
 
 ```bash
-# Clone this bad boy
+# Clone the repository
 git clone https://github.com/5ajaki/veri5ight.git
 
-# Install the goodies
+# Install dependencies
 npm install
 
-# Build it!
+# Build the project
 npm run build
 ```
 
@@ -34,7 +35,7 @@ cp .env.example .env
 2. Add your Ethereum node URL:
 
 ```env
-ETH_NODE_URL="http://your.awesome.node:8545"
+ETH_NODE_URL="http://your.ethereum.node:8545"
 ```
 
 3. Configure Claude Desktop:
@@ -44,7 +45,7 @@ ETH_NODE_URL="http://your.awesome.node:8545"
   "mcpServers": {
     "veri5ight": {
       "command": "node",
-      "args": ["/path/to/veri5ight/dist/index.js"]
+      "args": ["/absolute/path/to/veri5ight/dist/index.js"]
     }
   }
 }
@@ -52,23 +53,41 @@ ETH_NODE_URL="http://your.awesome.node:8545"
 
 ## 🎮 Available Tools
 
-### 🏦 ethereum/getENSBalance
+### ethereum_getENSBalance
+
+Get the ENS token balance for any address or ENS name.
+
+Example:
 
 ```
 Claude, what's vitalik.eth's ENS balance?
 ```
 
-### 📝 ethereum/getContractCode
+### ethereum_getContractInfo
+
+Get detailed information about any ERC20 contract.
+
+Example:
 
 ```
-Claude, show me the contract code for uniswap.eth
+Claude, can you show me the contract details for the ENS token at 0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72?
 ```
 
-### 🔍 ethereum/decodeTransaction
+## 🔍 Debugging
 
+Check Claude's logs for any issues:
+
+```bash
+tail -n 20 -f ~/Library/Logs/Claude/mcp*.log
 ```
-Claude, what's happening in tx 0x1234...?
-```
+
+## 💡 Why Direct Node Access?
+
+- **Low Latency**: Direct node queries without API overhead
+- **No Rate Limits**: Unlimited queries to your own node
+- **Privacy**: Queries stay between you and your node
+- **Full Access**: Complete JSON-RPC API availability
+- **Real-time Data**: Direct access to latest blockchain state
 
 ## 🛠️ Development
 
