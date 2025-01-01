@@ -1,82 +1,88 @@
-import { createInterface } from 'readline';
+#!/usr/bin/env node
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  ErrorCode,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
+import { ethers } from "ethers";
+import { config } from "dotenv";
 
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  terminal: false
-});
+// Load environment variables
+config();
 
-type JsonRpcRequest = {
-  jsonrpc: string;
-  method: string;
-  params?: any;
-  id: number | string;
-};
+class Veri5ightServer {
+  private server: Server;
+  private provider: ethers.JsonRpcProvider;
 
-type JsonRpcResponse = {
-  jsonrpc: string;
-  id: number | string;
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-  };
-};
+  constructor() {
+    // Initialize server
+    this.server = new Server(
+      { name: "veri5ight", version: "1.0.0" },
+      { capabilities: { tools: {} } }
+    );
 
-function handleRequest(request: JsonRpcRequest): JsonRpcResponse {
-  switch (request.method) {
-    case 'initialize':
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          serverInfo: {
-            name: 'veri5ight',
-            version: '1.0.0'
+    // Initialize provider
+    this.provider = new ethers.JsonRpcProvider(process.env.ETH_NODE_URL);
+
+    this.setupHandlers();
+    this.setupErrorHandling();
+  }
+
+  private setupErrorHandling(): void {
+    this.server.onerror = (error) => {
+      console.error("[MCP Error]", error);
+    };
+
+    process.on("SIGINT", async () => {
+      await this.server.close();
+      process.exit(0);
+    });
+  }
+
+  private setupHandlers(): void {
+    // Register available tools
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [
+        {
+          name: "ping",
+          description: "Basic test tool",
+          parameters: {
+            type: "object",
+            properties: {},
+            required: [],
           },
-          capabilities: {}
-        }
-      };
+        },
+      ],
+    }));
 
-    case 'tools/list':
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          tools: []
-        }
-      };
+    // Handle tool calls
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
 
-    default:
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32601,
-          message: 'Method not found'
-        }
-      };
+      if (name === "ping") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "pong",
+            },
+          ],
+        };
+      }
+
+      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    });
+  }
+
+  async run(): Promise<void> {
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
   }
 }
 
-process.stdout.write('\n');
-
-rl.on('line', (line) => {
-  try {
-    const request = JSON.parse(line) as JsonRpcRequest;
-    const response = handleRequest(request);
-    process.stdout.write(JSON.stringify(response) + '\n');
-  } catch (error) {
-    const response: JsonRpcResponse = {
-      jsonrpc: '2.0',
-      id: 'error',
-      error: {
-        code: -32700,
-        message: 'Parse error'
-      }
-    };
-    process.stdout.write(JSON.stringify(response) + '\n');
-  }
-});
-
-process.stderr.write('Veri5ight MCP Server running on stdio\n');
+// Create and start server
+const server = new Veri5ightServer();
+server.run().catch(console.error);
