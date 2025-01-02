@@ -11,6 +11,8 @@ Veri5ight is a direct interface between Claude and Ethereum nodes, providing:
 - 🚀 Direct node access without rate limits
 - 🔒 Private, secure interactions
 
+<a href="https://glama.ai/mcp/servers/en31vxf492"><img width="380" height="200" src="https://glama.ai/mcp/servers/en31vxf492/badge" alt="Veri5ight Server MCP server" /></a>
+
 ## 🚀 Quick Start
 
 ```bash
