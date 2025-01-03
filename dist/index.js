@@ -255,16 +255,32 @@ class Veri5ightServer {
                 if (transactions.length >= limit)
                     break;
             }
+            // Process transactions with ENS resolution
+            const processedTxs = await Promise.all(transactions.map(async (tx) => {
+                // Lookup ENS names in parallel
+                const [fromENS, toENS] = await Promise.all([
+                    tx.from
+                        ? this.provider.lookupAddress(tx.from).catch(() => null)
+                        : null,
+                    tx.to ? this.provider.lookupAddress(tx.to).catch(() => null) : null,
+                ]);
+                return {
+                    hash: tx.hash,
+                    from: fromENS || tx.from,
+                    to: toENS || tx.to || "Contract Creation",
+                    value: ethers.formatEther(tx.value),
+                };
+            }));
             return {
                 content: [
                     {
                         type: "text",
                         text: `Recent transactions for ${address}:\n` +
-                            transactions
-                                .map((tx) => `${transactions.indexOf(tx) + 1}. Hash: ${tx.hash}\n` +
+                            processedTxs
+                                .map((tx, i) => `${i + 1}. Hash: ${tx.hash}\n` +
                                 `   From: ${tx.from}\n` +
                                 `   To: ${tx.to}\n` +
-                                `   Value: ${ethers.formatEther(tx.value)} ETH`)
+                                `   Value: ${tx.value} ETH`)
                                 .join("\n\n"),
                     },
                 ],
@@ -367,6 +383,11 @@ class Veri5ightServer {
 2. The transaction exists on network ${network.name}
 3. Your node is fully synced`);
             }
+            // Resolve ENS names in parallel
+            const [fromENS, toENS] = await Promise.all([
+                tx.from ? this.provider.lookupAddress(tx.from).catch(() => null) : null,
+                tx.to ? this.provider.lookupAddress(tx.to).catch(() => null) : null,
+            ]);
             // Format values
             const value = tx.value ? ethers.formatEther(tx.value) : "0";
             const gasPrice = tx.gasPrice
@@ -388,13 +409,16 @@ class Veri5ightServer {
                     console.error("Error decoding transaction data:", error);
                 }
             }
-            // Format event logs
+            // Format event logs with ENS resolution
             let eventLogs = "";
             if (receipt && receipt.logs.length > 0) {
                 eventLogs = "\n\nEvent Logs:";
                 for (const log of receipt.logs) {
                     try {
-                        eventLogs += `\n• From Contract: ${log.address}`;
+                        const contractENS = await this.provider
+                            .lookupAddress(log.address)
+                            .catch(() => null);
+                        eventLogs += `\n• From Contract: ${contractENS || log.address}`;
                         eventLogs += `\n  Topics: ${log.topics.join(", ")}`;
                         if (log.data && log.data !== "0x") {
                             eventLogs += `\n  Data: ${log.data}`;
@@ -411,8 +435,8 @@ class Veri5ightServer {
                         type: "text",
                         text: `Transaction Information for ${hash}:
 • Status: ${status}
-• From: ${tx.from}
-• To: ${tx.to || "Contract Creation"}
+• From: ${fromENS || tx.from}
+• To: ${toENS || tx.to || "Contract Creation"}
 • Value: ${value} ETH
 • Gas Price: ${gasPrice} Gwei
 • Gas Used: ${gasUsed}
