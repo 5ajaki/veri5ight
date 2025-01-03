@@ -43,6 +43,24 @@ class Veri5ightServer {
             return {
                 tools: [
                     {
+                        name: "ethereum_getRecentTransactions",
+                        description: "Get recent transactions for an Ethereum address",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                address: {
+                                    type: "string",
+                                    description: "Ethereum address or ENS name",
+                                },
+                                limit: {
+                                    type: "number",
+                                    description: "Number of transactions to return (default: 3)",
+                                },
+                            },
+                            required: ["address"],
+                        },
+                    },
+                    {
                         name: "ethereum_getENSBalance",
                         description: "Get ENS token balance for an address",
                         inputSchema: {
@@ -84,22 +102,89 @@ class Veri5ightServer {
                             required: ["address"],
                         },
                     },
+                    {
+                        name: "ethereum_getTransactionInfo",
+                        description: "Get detailed information about an Ethereum transaction",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                hash: {
+                                    type: "string",
+                                    description: "Transaction hash",
+                                },
+                            },
+                            required: ["hash"],
+                        },
+                    },
                 ],
             };
         });
         this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
             console.error("Tool call received:", JSON.stringify(request, null, 2));
             switch (request.params.name) {
+                case "ethereum_getRecentTransactions":
+                    return await this.handleGetRecentTransactions(request);
                 case "ethereum_getENSBalance":
                     return await this.handleGetENSBalance(request);
                 case "ethereum_getContractInfo":
                     return await this.handleGetContractInfo(request);
                 case "ethereum_getENSDelegation":
                     return await this.handleGetENSDelegation(request);
+                case "ethereum_getTransactionInfo":
+                    return await this.handleGetTransactionInfo(request);
                 default:
                     throw new Error(`Unknown tool: ${request.params.name}`);
             }
         });
+    }
+    async handleGetRecentTransactions(request) {
+        try {
+            const address = request.params.arguments?.address;
+            const limit = request.params.arguments?.limit || 3;
+            if (!address) {
+                throw new Error("Address is required");
+            }
+            // Get latest block number
+            const latestBlock = await this.provider.getBlockNumber();
+            const transactions = [];
+            // Scan recent blocks for transactions
+            for (let i = 0; i < 10 && transactions.length < limit; i++) {
+                const block = (await this.provider.getBlock(latestBlock - i, true));
+                if (!block || !block.transactions)
+                    continue;
+                const addressTxs = block.transactions.filter((tx) => tx.from?.toLowerCase() === address.toLowerCase() ||
+                    tx.to?.toLowerCase() === address.toLowerCase());
+                transactions.push(...addressTxs.slice(0, limit - transactions.length));
+                if (transactions.length >= limit)
+                    break;
+            }
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Recent transactions for ${address}:\n` +
+                            transactions
+                                .map((tx, i) => `${i + 1}. Hash: ${tx.hash}\n` +
+                                `   From: ${tx.from}\n` +
+                                `   To: ${tx.to}\n` +
+                                `   Value: ${ethers.formatEther(tx.value)} ETH`)
+                                .join("\n\n"),
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            console.error("Error getting recent transactions:", error);
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Error getting recent transactions: ${errorMessage}`,
+                    },
+                ],
+            };
+        }
     }
     async handleGetENSBalance(request) {
         try {
@@ -221,6 +306,99 @@ class Veri5ightServer {
                     {
                         type: "text",
                         text: `Error getting ENS delegation: ${errorMessage}`,
+                    },
+                ],
+            };
+        }
+    }
+    async handleGetTransactionInfo(request) {
+        try {
+            const hash = request.params.arguments?.hash;
+            if (!hash) {
+                throw new Error("Transaction hash is required");
+            }
+            // Log the network we're connected to
+            const network = await this.provider.getNetwork();
+            console.error(`Looking up transaction on network: ${network.name} (chainId: ${network.chainId})`);
+            // Get transaction and receipt in parallel
+            const [tx, receipt] = await Promise.all([
+                this.provider.getTransaction(hash).catch((error) => {
+                    console.error(`Error fetching transaction: ${error.message}`);
+                    return null;
+                }),
+                this.provider.getTransactionReceipt(hash).catch((error) => {
+                    console.error(`Error fetching receipt: ${error.message}`);
+                    return null;
+                }),
+            ]);
+            if (!tx) {
+                throw new Error(`Transaction not found. Please verify:
+1. The transaction hash is correct
+2. The transaction exists on network ${network.name}
+3. Your node is fully synced`);
+            }
+            // Format values
+            const value = tx.value ? ethers.formatEther(tx.value) : "0";
+            const gasPrice = tx.gasPrice
+                ? ethers.formatUnits(tx.gasPrice, "gwei")
+                : "unknown";
+            const status = receipt
+                ? receipt.status === 1
+                    ? "Success"
+                    : "Failed"
+                : "Pending";
+            const gasUsed = receipt ? receipt.gasUsed.toString() : "unknown";
+            // Get any contract interaction data
+            let methodInfo = "";
+            if (tx.data && tx.data !== "0x") {
+                try {
+                    methodInfo = `\n• Input Data: ${tx.data}`;
+                }
+                catch (error) {
+                    console.error("Error decoding transaction data:", error);
+                }
+            }
+            // Format event logs
+            let eventLogs = "";
+            if (receipt && receipt.logs.length > 0) {
+                eventLogs = "\n\nEvent Logs:";
+                for (const log of receipt.logs) {
+                    try {
+                        eventLogs += `\n• From Contract: ${log.address}`;
+                        eventLogs += `\n  Topics: ${log.topics.join(", ")}`;
+                        if (log.data && log.data !== "0x") {
+                            eventLogs += `\n  Data: ${log.data}`;
+                        }
+                    }
+                    catch (error) {
+                        console.error("Error processing log:", error);
+                    }
+                }
+            }
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Transaction Information for ${hash}:
+• Status: ${status}
+• From: ${tx.from}
+• To: ${tx.to || "Contract Creation"}
+• Value: ${value} ETH
+• Gas Price: ${gasPrice} Gwei
+• Gas Used: ${gasUsed}
+• Block Number: ${tx.blockNumber || "Pending"}${methodInfo}${eventLogs}`,
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            console.error("Error getting transaction info:", error);
+            const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `Error getting transaction info: ${errorMessage}`,
                     },
                 ],
             };
