@@ -2,8 +2,11 @@
   node_modules/
   package-lock.json
   
-  # Build output
+  # Build outputs
   dist/
+  build/
+  *.js.map
+  *.d.ts.map
   
   # Environment variables
   .env
