@@ -12,16 +12,16 @@ import { config } from "dotenv";
 // Load environment variables
 config();
 
-// Constants
-const ENS_TOKEN = "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72";
-const ENS_EXTENDED_ABI = [
-  // Standard ERC20
+// Standard interfaces
+const ERC20_ABI = [
   "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function decimals() view returns (uint8)",
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
-  // Delegation specific
+];
+
+const GOVERNANCE_ABI = [
   "function delegates(address) view returns (address)",
   "function getVotes(address) view returns (uint256)",
 ];
@@ -29,7 +29,6 @@ const ENS_EXTENDED_ABI = [
 class Veri5ightServer {
   private server: Server;
   private provider: ethers.JsonRpcProvider;
-  private ensContract: ethers.Contract;
 
   constructor() {
     console.error("Initializing Veri5ight server...");
@@ -39,12 +38,6 @@ class Veri5ightServer {
     );
 
     this.provider = new ethers.JsonRpcProvider(process.env.ETH_NODE_URL);
-    this.ensContract = new ethers.Contract(
-      ENS_TOKEN,
-      ["function balanceOf(address) view returns (uint256)"],
-      this.provider
-    );
-
     this.setupHandlers();
     this.setupErrorHandling();
   }
@@ -84,8 +77,8 @@ class Veri5ightServer {
             },
           },
           {
-            name: "ethereum_getENSBalance",
-            description: "Get ENS token balance for an address",
+            name: "ethereum_getTokenBalance",
+            description: "Get ERC20 token balance for an address",
             inputSchema: {
               type: "object",
               properties: {
@@ -93,8 +86,30 @@ class Veri5ightServer {
                   type: "string",
                   description: "Ethereum address or ENS name",
                 },
+                token: {
+                  type: "string",
+                  description: "Token contract address or ENS name",
+                },
               },
-              required: ["address"],
+              required: ["address", "token"],
+            },
+          },
+          {
+            name: "ethereum_getTokenDelegation",
+            description: "Get delegation info for an ERC20 governance token",
+            inputSchema: {
+              type: "object",
+              properties: {
+                address: {
+                  type: "string",
+                  description: "Ethereum address or ENS name",
+                },
+                token: {
+                  type: "string",
+                  description: "Token contract address or ENS name",
+                },
+              },
+              required: ["address", "token"],
             },
           },
           {
@@ -106,20 +121,6 @@ class Veri5ightServer {
                 address: {
                   type: "string",
                   description: "Contract address or ENS name",
-                },
-              },
-              required: ["address"],
-            },
-          },
-          {
-            name: "ethereum_getENSDelegation",
-            description: "Get ENS delegation info for an address",
-            inputSchema: {
-              type: "object",
-              properties: {
-                address: {
-                  type: "string",
-                  description: "Ethereum address or ENS name",
                 },
               },
               required: ["address"],
@@ -150,12 +151,12 @@ class Veri5ightServer {
       switch (request.params.name) {
         case "ethereum_getRecentTransactions":
           return await this.handleGetRecentTransactions(request);
-        case "ethereum_getENSBalance":
-          return await this.handleGetENSBalance(request);
+        case "ethereum_getTokenBalance":
+          return await this.handleGetTokenBalance(request);
+        case "ethereum_getTokenDelegation":
+          return await this.handleGetTokenDelegation(request);
         case "ethereum_getContractInfo":
           return await this.handleGetContractInfo(request);
-        case "ethereum_getENSDelegation":
-          return await this.handleGetENSDelegation(request);
         case "ethereum_getTransactionInfo":
           return await this.handleGetTransactionInfo(request);
         default:
@@ -163,6 +164,117 @@ class Veri5ightServer {
       }
     });
   }
+
+  private async handleGetTokenBalance(request: any) {
+    try {
+      const address = request.params.arguments?.address;
+      const tokenAddress = request.params.arguments?.token;
+
+      if (!address || !tokenAddress) {
+        throw new Error("Address and token address are required");
+      }
+
+      // Create contract instance
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ERC20_ABI,
+        this.provider
+      );
+
+      // Get decimals and balance
+      const [decimals, balance, symbol] = await Promise.all([
+        tokenContract.decimals(),
+        tokenContract.balanceOf(address),
+        tokenContract.symbol(),
+      ]);
+
+      const formattedBalance = ethers.formatUnits(balance, decimals);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Token Balance for ${address}: ${formattedBalance} ${symbol}`,
+          },
+        ],
+      };
+    } catch (error: unknown) {
+      console.error("Error getting token balance:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error getting token balance: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+
+  private async handleGetTokenDelegation(request: any) {
+    try {
+      const address = request.params.arguments?.address;
+      const tokenAddress = request.params.arguments?.token;
+
+      if (!address || !tokenAddress) {
+        throw new Error("Address and token address are required");
+      }
+
+      // Create contract instance with both ERC20 and governance functions
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        [...ERC20_ABI, ...GOVERNANCE_ABI],
+        this.provider
+      );
+
+      // Check if contract supports delegation
+      try {
+        const [delegate, votingPower, decimals, symbol] = await Promise.all([
+          tokenContract.delegates(address),
+          tokenContract.getVotes(address),
+          tokenContract.decimals(),
+          tokenContract.symbol(),
+        ]);
+
+        const formattedVotingPower = ethers.formatUnits(votingPower, decimals);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Token Delegation Info for ${address}:
+• Delegated To: ${delegate === ethers.ZeroAddress ? "No delegation" : delegate}
+• Voting Power: ${formattedVotingPower} ${symbol}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Token at ${tokenAddress} does not support delegation.`,
+            },
+          ],
+        };
+      }
+    } catch (error: unknown) {
+      console.error("Error getting token delegation:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error getting token delegation: ${errorMessage}`,
+          },
+        ],
+      };
+    }
+  }
+
   private async handleGetRecentTransactions(request: any) {
     try {
       const address = request.params.arguments?.address;
@@ -181,7 +293,9 @@ class Veri5ightServer {
         const block = (await this.provider.getBlock(
           latestBlock - i,
           true
-        )) as ethers.Block & { transactions: ethers.TransactionResponse[] };
+        )) as ethers.Block & {
+          transactions: ethers.TransactionResponse[];
+        };
         if (!block || !block.transactions) continue;
 
         const addressTxs = block.transactions.filter(
@@ -190,7 +304,7 @@ class Veri5ightServer {
             tx.to?.toLowerCase() === address.toLowerCase()
         );
 
-        transactions.push(...addressTxs.slice(0, limit - transactions.length));
+        transactions.push(...(addressTxs as ethers.TransactionResponse[]));
         if (transactions.length >= limit) break;
       }
 
@@ -202,8 +316,8 @@ class Veri5ightServer {
               `Recent transactions for ${address}:\n` +
               transactions
                 .map(
-                  (tx, i) =>
-                    `${i + 1}. Hash: ${tx.hash}\n` +
+                  (tx: ethers.TransactionResponse) =>
+                    `${transactions.indexOf(tx) + 1}. Hash: ${tx.hash}\n` +
                     `   From: ${tx.from}\n` +
                     `   To: ${tx.to}\n` +
                     `   Value: ${ethers.formatEther(tx.value)} ETH`
@@ -226,39 +340,6 @@ class Veri5ightServer {
       };
     }
   }
-  private async handleGetENSBalance(request: any) {
-    try {
-      const address = request.params.arguments?.address;
-      if (!address) {
-        throw new Error("Address is required");
-      }
-
-      const balance = await this.ensContract.balanceOf(address);
-      const formattedBalance = ethers.formatUnits(balance, 18); // ENS uses 18 decimals
-      console.error("ENS balance retrieved:", formattedBalance);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `ENS Balance for ${address}: ${formattedBalance} ENS tokens`,
-          },
-        ],
-      };
-    } catch (error: unknown) {
-      console.error("Error getting ENS balance:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting ENS balance: ${errorMessage}`,
-          },
-        ],
-      };
-    }
-  }
 
   private async handleGetContractInfo(request: any) {
     try {
@@ -276,11 +357,7 @@ class Veri5ightServer {
       // Try to get ERC20 info if available
       let tokenInfo = "";
       try {
-        const contract = new ethers.Contract(
-          address,
-          ENS_EXTENDED_ABI,
-          this.provider
-        );
+        const contract = new ethers.Contract(address, ERC20_ABI, this.provider);
         const [name, symbol, decimals, totalSupply] = await Promise.all([
           contract.name().catch(() => null),
           contract.symbol().catch(() => null),
@@ -322,51 +399,6 @@ class Veri5ightServer {
           {
             type: "text",
             text: `Error getting contract info: ${errorMessage}`,
-          },
-        ],
-      };
-    }
-  }
-
-  private async handleGetENSDelegation(request: any) {
-    try {
-      const address = request.params.arguments?.address;
-      if (!address) {
-        throw new Error("Address is required");
-      }
-
-      const ensContract = new ethers.Contract(
-        ENS_TOKEN,
-        ENS_EXTENDED_ABI,
-        this.provider
-      );
-
-      const [delegate, votingPower] = await Promise.all([
-        ensContract.delegates(address),
-        ensContract.getVotes(address),
-      ]);
-
-      const formattedVotingPower = ethers.formatUnits(votingPower, 18);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `ENS Delegation Info for ${address}:
-• Delegated To: ${delegate === ethers.ZeroAddress ? "No delegation" : delegate}
-• Voting Power: ${formattedVotingPower} ENS`,
-          },
-        ],
-      };
-    } catch (error: unknown) {
-      console.error("Error getting ENS delegation:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error getting ENS delegation: ${errorMessage}`,
           },
         ],
       };
