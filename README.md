@@ -6,7 +6,7 @@
 
 Veri5ight is a direct interface between Claude and Ethereum nodes, providing:
 
-- 💰 Real-time token balance checks
+- 💰 Real-time token balance and delegation info for any ERC20
 - 🔎 Smart contract information
 - 🚀 Direct node access without rate limits
 - 🔒 Private, secure interactions
@@ -34,10 +34,10 @@ npm run build
 cp .env.example .env
 ```
 
-2. Add your Ethereum node URL:
+2. Add your Ethereum node URL (example shown below - update with your actual node URL and port):
 
 ```env
-ETH_NODE_URL="http://your.ethereum.node:8545"
+ETH_NODE_URL="http://localhost:8545"  # Example - replace with your node's URL and port
 ```
 
 3. Configure Claude Desktop:
@@ -47,33 +47,68 @@ ETH_NODE_URL="http://your.ethereum.node:8545"
   "mcpServers": {
     "veri5ight": {
       "command": "node",
-      "args": ["/absolute/path/to/veri5ight/dist/index.js"]
+      "args": ["/absolute/path/to/veri5ight/dist/index.js"] // Local path to the compiled index.js file
     }
   }
 }
 ```
 
+Note: The path in step 3 must point to the compiled index.js in your local dist directory. This is created when you run `npm run build`.
+
+### Launch Options
+
+By default, Veri5ight launches automatically with the Claude Desktop App. If you prefer to run it on-demand:
+
+1. Remove the postbuild script from package.json that auto-launches with Claude
+2. Run manually when needed:
+
+```bash
+node dist/index.js
+```
+
 ## 🎮 Available Tools
 
-### ethereum_getENSBalance
+### ethereum_getTokenBalance
 
-Get the ENS token balance for any address or ENS name.
+Get the token balance for any ERC20 token using address or ENS name.
 
 Example:
 
 ```
-Claude, what's vitalik.eth's ENS balance?
+Claude, what's vitalik.eth's UNI balance?
+```
+
+### ethereum_getTokenDelegation
+
+Check delegation info for any governance token.
+
+Example:
+
+```
+Claude, who has nick.eth delegated their tokens to?
 ```
 
 ### ethereum_getContractInfo
 
-Get detailed information about any ERC20 contract.
+Get detailed information about any smart contract.
 
 Example:
 
 ```
-Claude, can you show me the contract details for the ENS token at 0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72?
+Claude, what can you tell me about this contract: nick.eth
 ```
+
+### ethereum_getRecentTransactions
+
+View recent transactions for any address. Note: This function scans the most recent 10 blocks for transactions involving the specified address.
+
+Example:
+
+```
+Claude, show me any recent transactions for vitalik.eth
+```
+
+The function will return up to the requested number of transactions (default 3) found within those blocks. If no transactions are found in the recent blocks, it will return an empty result.
 
 ## 🔍 Debugging
 
@@ -127,5 +162,3 @@ MIT - Go wild! See [LICENSE](LICENSE) for the boring legal stuff.
 - 🎉 Cool feature idea? Let's hear it!
 
 Remember: Veri5ight is like a Swiss Army knife for Ethereum data - just don't try to open bottles with it! 🍾
-
-:0
