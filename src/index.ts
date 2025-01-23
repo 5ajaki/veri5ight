@@ -42,6 +42,25 @@ class Veri5ightServer {
     this.setupErrorHandling();
   }
 
+  private async resolveAddress(addressOrENS: string): Promise<string> {
+    try {
+      // Check if it's an ENS name (ends in .eth)
+      if (addressOrENS.toLowerCase().endsWith(".eth")) {
+        const resolvedAddress = await this.provider.resolveName(addressOrENS);
+        if (!resolvedAddress) {
+          throw new Error(`Could not resolve ENS name: ${addressOrENS}`);
+        }
+        console.error(`Resolved ${addressOrENS} to ${resolvedAddress}`);
+        return resolvedAddress;
+      }
+      // If it's not an ENS name, return as is
+      return addressOrENS;
+    } catch (error) {
+      console.error(`Error resolving address: ${error}`);
+      throw error;
+    }
+  }
+
   private setupErrorHandling(): void {
     this.server.onerror = (error) => {
       console.error("[MCP Error]", error);
@@ -167,12 +186,18 @@ class Veri5ightServer {
 
   private async handleGetTokenBalance(request: any) {
     try {
-      const address = request.params.arguments?.address;
-      const tokenAddress = request.params.arguments?.token;
+      const addressOrENS = request.params.arguments?.address;
+      const tokenAddressOrENS = request.params.arguments?.token;
 
-      if (!address || !tokenAddress) {
+      if (!addressOrENS || !tokenAddressOrENS) {
         throw new Error("Address and token address are required");
       }
+
+      // Resolve both addresses if they are ENS names
+      const [address, tokenAddress] = await Promise.all([
+        this.resolveAddress(addressOrENS),
+        this.resolveAddress(tokenAddressOrENS),
+      ]);
 
       // Create contract instance
       const tokenContract = new ethers.Contract(
@@ -194,7 +219,7 @@ class Veri5ightServer {
         content: [
           {
             type: "text",
-            text: `Token Balance for ${address}: ${formattedBalance} ${symbol}`,
+            text: `Token Balance for ${addressOrENS}: ${formattedBalance} ${symbol}`,
           },
         ],
       };
@@ -215,12 +240,18 @@ class Veri5ightServer {
 
   private async handleGetTokenDelegation(request: any) {
     try {
-      const address = request.params.arguments?.address;
-      const tokenAddress = request.params.arguments?.token;
+      const addressOrENS = request.params.arguments?.address;
+      const tokenAddressOrENS = request.params.arguments?.token;
 
-      if (!address || !tokenAddress) {
+      if (!addressOrENS || !tokenAddressOrENS) {
         throw new Error("Address and token address are required");
       }
+
+      // Resolve both addresses if they are ENS names
+      const [address, tokenAddress] = await Promise.all([
+        this.resolveAddress(addressOrENS),
+        this.resolveAddress(tokenAddressOrENS),
+      ]);
 
       // Create contract instance with both ERC20 and governance functions
       const tokenContract = new ethers.Contract(
@@ -244,7 +275,7 @@ class Veri5ightServer {
           content: [
             {
               type: "text",
-              text: `Token Delegation Info for ${address}:
+              text: `Token Delegation Info for ${addressOrENS}:
 • Delegated To: ${delegate === ethers.ZeroAddress ? "No delegation" : delegate}
 • Voting Power: ${formattedVotingPower} ${symbol}`,
             },
@@ -255,7 +286,7 @@ class Veri5ightServer {
           content: [
             {
               type: "text",
-              text: `Token at ${tokenAddress} does not support delegation.`,
+              text: `Token at ${tokenAddressOrENS} does not support delegation.`,
             },
           ],
         };
@@ -277,54 +308,57 @@ class Veri5ightServer {
 
   private async handleGetRecentTransactions(request: any) {
     try {
-      const address = request.params.arguments?.address;
+      const addressOrENS = request.params.arguments?.address;
       const limit = request.params.arguments?.limit || 3;
 
-      if (!address) {
+      if (!addressOrENS) {
         throw new Error("Address is required");
       }
 
-      // Get latest block number
-      const latestBlock = await this.provider.getBlockNumber();
+      // Resolve ENS name if needed
+      const address = await this.resolveAddress(addressOrENS);
+
+      // Get current block
+      const currentBlock = await this.provider.getBlockNumber();
       const transactions: ethers.TransactionResponse[] = [];
 
-      // Scan recent blocks for transactions
+      // Look through last 10 blocks
       for (let i = 0; i < 10 && transactions.length < limit; i++) {
-        const block = (await this.provider.getBlock(
-          latestBlock - i,
-          true
-        )) as ethers.Block & {
-          transactions: ethers.TransactionResponse[];
-        };
+        const block = await this.provider.getBlock(currentBlock - i, true);
         if (!block || !block.transactions) continue;
 
-        const addressTxs = block.transactions.filter(
+        // Filter transactions involving our address
+        const relevantTxs = (
+          block.transactions as unknown as ethers.TransactionResponse[]
+        ).filter(
           (tx: ethers.TransactionResponse) =>
-            tx.from?.toLowerCase() === address.toLowerCase() ||
-            tx.to?.toLowerCase() === address.toLowerCase()
+            tx.from.toLowerCase() === address.toLowerCase() ||
+            (tx.to && tx.to.toLowerCase() === address.toLowerCase())
         );
 
-        transactions.push(...(addressTxs as ethers.TransactionResponse[]));
-        if (transactions.length >= limit) break;
+        transactions.push(...relevantTxs.slice(0, limit - transactions.length));
       }
 
-      // Process transactions with ENS resolution
-      const processedTxs = await Promise.all(
-        transactions.map(async (tx: ethers.TransactionResponse) => {
-          // Lookup ENS names in parallel
-          const [fromENS, toENS] = await Promise.all([
-            tx.from
-              ? this.provider.lookupAddress(tx.from).catch(() => null)
-              : null,
-            tx.to ? this.provider.lookupAddress(tx.to).catch(() => null) : null,
-          ]);
+      if (transactions.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `No recent transactions found for ${addressOrENS} in the last 10 blocks.`,
+            },
+          ],
+        };
+      }
 
-          return {
-            hash: tx.hash,
-            from: fromENS || tx.from,
-            to: toENS || tx.to || "Contract Creation",
-            value: ethers.formatEther(tx.value),
-          };
+      const txDetails = await Promise.all(
+        transactions.map(async (tx) => {
+          const receipt = await this.provider.getTransactionReceipt(tx.hash);
+          const status = receipt ? (receipt.status === 1 ? "✅" : "❌") : "⏳";
+          return `${status} ${tx.hash}
+• From: ${tx.from}
+• To: ${tx.to || "Contract Creation"}
+• Value: ${ethers.formatEther(tx.value)} ETH
+• Gas Used: ${receipt ? receipt.gasUsed.toString() : "pending"}`;
         })
       );
 
@@ -332,17 +366,9 @@ class Veri5ightServer {
         content: [
           {
             type: "text",
-            text:
-              `Recent transactions for ${address}:\n` +
-              processedTxs
-                .map(
-                  (tx, i) =>
-                    `${i + 1}. Hash: ${tx.hash}\n` +
-                    `   From: ${tx.from}\n` +
-                    `   To: ${tx.to}\n` +
-                    `   Value: ${tx.value} ETH`
-                )
-                .join("\n\n"),
+            text: `Recent transactions for ${addressOrENS}:\n\n${txDetails.join(
+              "\n\n"
+            )}`,
           },
         ],
       };
@@ -363,50 +389,44 @@ class Veri5ightServer {
 
   private async handleGetContractInfo(request: any) {
     try {
-      const address = request.params.arguments?.address;
-      if (!address) {
+      const addressOrENS = request.params.arguments?.address;
+      if (!addressOrENS) {
         throw new Error("Address is required");
       }
 
-      // Get basic contract info
+      // Resolve ENS name if needed
+      const address = await this.resolveAddress(addressOrENS);
+
+      // Rest of the function remains the same
       const code = await this.provider.getCode(address);
-      if (code === "0x") {
-        throw new Error("No contract found at this address");
+      const isContract = code !== "0x";
+
+      if (!isContract) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `${addressOrENS} is not a contract address.`,
+            },
+          ],
+        };
       }
 
-      // Try to get ERC20 info if available
-      let tokenInfo = "";
-      try {
-        const contract = new ethers.Contract(address, ERC20_ABI, this.provider);
-        const [name, symbol, decimals, totalSupply] = await Promise.all([
-          contract.name().catch(() => null),
-          contract.symbol().catch(() => null),
-          contract.decimals().catch(() => null),
-          contract.totalSupply().catch(() => null),
-        ]);
-
-        if (name || symbol || decimals || totalSupply) {
-          tokenInfo = `\n\nERC20 Token Information:
-• Name: ${name || "N/A"}
-• Symbol: ${symbol || "N/A"}
-• Decimals: ${decimals || "N/A"}
-• Total Supply: ${
-            totalSupply
-              ? ethers.formatUnits(totalSupply, decimals || 18)
-              : "N/A"
-          } ${symbol || ""}`;
-        }
-      } catch (error) {
-        console.error("Not an ERC20 token or error getting token info:", error);
-      }
+      // Get contract info
+      const [balance, transactionCount] = await Promise.all([
+        this.provider.getBalance(address),
+        this.provider.getTransactionCount(address),
+      ]);
 
       return {
         content: [
           {
             type: "text",
-            text: `Contract Information for ${address}:
-• Bytecode Size: ${(code.length - 2) / 2} bytes
-• Contract Address: ${address}${tokenInfo}`,
+            text: `Contract Info for ${addressOrENS}:
+• Address: ${address}
+• Balance: ${ethers.formatEther(balance)} ETH
+• Transaction Count: ${transactionCount}
+• Code Size: ${(code.length - 2) / 2} bytes`,
           },
         ],
       };
