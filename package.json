@@ -1,7 +1,7 @@
 {
   "name": "@modelcontextprotocol/server-veri5ight",
   "version": "0.1.0",
-  "description": "Simplified MCP server for ENS DAO operations",
+  "description": "Simplified MCP server for Safe operations",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -11,10 +11,12 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "dotenv": "^16.4.5",
-    "ethers": "^6.11.1"
+    "ethers": "^6.11.1",
+    "node-fetch": "^3.3.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
+    "@types/node-fetch": "^2.6.11",
     "typescript": "^5.3.3"
   }
 }
