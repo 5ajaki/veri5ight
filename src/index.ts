@@ -332,7 +332,7 @@ class Veri5ightServer {
           block.transactions as unknown as ethers.TransactionResponse[]
         ).filter(
           (tx: ethers.TransactionResponse) =>
-            tx.from.toLowerCase() === address.toLowerCase() ||
+            (tx.from && tx.from.toLowerCase() === address.toLowerCase()) ||
             (tx.to && tx.to.toLowerCase() === address.toLowerCase())
         );
 
@@ -355,7 +355,7 @@ class Veri5ightServer {
           const receipt = await this.provider.getTransactionReceipt(tx.hash);
           const status = receipt ? (receipt.status === 1 ? "✅" : "❌") : "⏳";
           return `${status} ${tx.hash}
-• From: ${tx.from}
+• From: ${tx.from || "Unknown"}
 • To: ${tx.to || "Contract Creation"}
 • Value: ${ethers.formatEther(tx.value)} ETH
 • Gas Used: ${receipt ? receipt.gasUsed.toString() : "pending"}`;

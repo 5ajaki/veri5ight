@@ -281,7 +281,7 @@ class Veri5ightServer {
                 if (!block || !block.transactions)
                     continue;
                 // Filter transactions involving our address
-                const relevantTxs = block.transactions.filter((tx) => tx.from.toLowerCase() === address.toLowerCase() ||
+                const relevantTxs = block.transactions.filter((tx) => (tx.from && tx.from.toLowerCase() === address.toLowerCase()) ||
                     (tx.to && tx.to.toLowerCase() === address.toLowerCase()));
                 transactions.push(...relevantTxs.slice(0, limit - transactions.length));
             }
@@ -299,7 +299,7 @@ class Veri5ightServer {
                 const receipt = await this.provider.getTransactionReceipt(tx.hash);
                 const status = receipt ? (receipt.status === 1 ? "✅" : "❌") : "⏳";
                 return `${status} ${tx.hash}
-• From: ${tx.from}
+• From: ${tx.from || "Unknown"}
 • To: ${tx.to || "Contract Creation"}
 • Value: ${ethers.formatEther(tx.value)} ETH
 • Gas Used: ${receipt ? receipt.gasUsed.toString() : "pending"}`;
