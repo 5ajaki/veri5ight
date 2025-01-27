@@ -1,4 +1,5 @@
 # 🔍 Veri5ight
+[![smithery badge](https://smithery.ai/badge/5ajaki-veri5ight)](https://smithery.ai/server/5ajaki-veri5ight)
 
 > Your friendly neighborhood Ethereum node whisperer! A Model Context Protocol (MCP) server that helps Claude chat with Ethereum nodes.
 
@@ -14,7 +15,15 @@ Veri5ight is a direct interface between Claude and Ethereum nodes, providing:
 <a href="https://glama.ai/mcp/servers/en31vxf492"><img width="380" height="200" src="https://glama.ai/mcp/servers/en31vxf492/badge" alt="Veri5ight Server MCP server" /></a>
 
 ## 🚀 Quick Start
+### Installing via Smithery
 
+To install Veri5ight for Claude Desktop automatically via [Smithery](https://smithery.ai/server/5ajaki-veri5ight):
+
+```bash
+npx -y @smithery/cli install 5ajaki-veri5ight --client claude
+```
+
+### Manual Installation
 ```bash
 # Clone the repository
 git clone https://github.com/5ajaki/veri5ight.git
